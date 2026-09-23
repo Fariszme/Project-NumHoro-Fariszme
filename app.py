@@ -1,16 +1,28 @@
+import os
 import streamlit as st
 from google import genai
-from google.genai import types
 from datetime import datetime
 
-gemini_api_key = 'API Key'
-client = genai.Client(api_key=gemini_api_key)
-
-def generate_gemini_answer(prompt):
-    response = client.models.generate_content(
-        model='gemini-2.5-flash-lite', contents=prompt
-    )
-    return response.text
+def generate_gemini_answer(prompt, system_prompt = "", is_json=False):
+    # 1. ดึงค่าจาก Streamlit Secrets ก่อน ถ้าไม่มีค่อยหาใน os.environ
+    gemini_api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    
+    # 2. แก้ไขชื่อ Model ให้ถูกต้อง (เช่น gemini-2.5-flash หรือ gemini-1.5-flash)
+    gemini_model = st.secrets.get("GEMINI_MODEL") or os.environ.get("GEMINI_MODEL", 'gemini-3.1-flash-lite')
+    gmn_client = genai.Client(api_key=gemini_api_key)
+    output_type = "application/json" if is_json else "text/plain"
+    try:
+        response = gmn_client.models.generate_content(
+            model=gemini_model,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type=output_type
+            ),
+            contents=prompt
+        )
+        return response.text
+    except Exception as e:
+        return f"Error: Could not generate text from AI.: {e}"
 # test = generate_gemini_answer("who are tonton songwut?")
 
 def horo_tell(l4phone, question, time_diff):
@@ -140,7 +152,7 @@ col12.write(':full_moon::waning_gibbous_moon::last_quarter_moon::waning_crescent
 st.divider()
 
 col21, col22 = st.columns([2,1])
-user_question = col21.text_input('What you want to know\n\nคำถามที่อยากจะรู้:',placeholder='Winning Number Prediction (Last 2 Digits)/เลขสองตัวท้ายที่จะออก')
+user_question = col21.text_input('What you want to know\n\nคำถามที่อยากจะรู้:',placeholder='กรอกข้อความที่อยากจะรู้')
 time_diff = col22.selectbox('Upcoming events in the next...\n\nที่จะเกิดขึ้นข้างหน้าในอีก:', ['','3 day/3 วัน','7 day/7 วัน','15 day/15 วัน','30 day/30 วัน'])
 
 if st.button("Interpret"):
