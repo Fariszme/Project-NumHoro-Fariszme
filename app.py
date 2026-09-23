@@ -1,170 +1,148 @@
+Python
 import os
+import time
 import streamlit as st
 from google import genai
 from datetime import datetime
 
-def generate_gemini_answer(prompt, system_prompt = "", is_json=False):
-    # 1. ดึงค่าจาก Streamlit Secrets ก่อน ถ้าไม่มีค่อยหาใน os.environ
+# 1. วาง st.set_page_config เป็นคำสั่งแรกสุดเสมอ
+st.set_page_config(page_title='Horoscope', page_icon='🔮')
+
+def generate_gemini_answer(prompt, system_prompt="", is_json=False):
     gemini_api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    if not gemini_api_key:
+        return "Error: ไม่พบ GEMINI_API_KEY กรุณาตั้งค่าใน Streamlit Secrets"
     
-    # 2. แก้ไขชื่อ Model ให้ถูกต้อง (เช่น gemini-2.5-flash หรือ gemini-1.5-flash)
-    gemini_model = st.secrets.get("GEMINI_MODEL") or os.environ.get("GEMINI_MODEL", 'gemini-3.1-flash-lite')
+    # บังคับใช้โมเดลเสถียรมาตรฐานเรียงตามลำดับป้องกัน Secrets ค้างชื่อผิด
+    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
+
     gmn_client = genai.Client(api_key=gemini_api_key)
     output_type = "application/json" if is_json else "text/plain"
-    try:
-        response = gmn_client.models.generate_content(
-            model=gemini_model,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                response_mime_type=output_type
-            ),
-            contents=prompt
-        )
-        return response.text
-    except Exception as e:
-        return f"Error: Could not generate text from AI.: {e}"
-# test = generate_gemini_answer("who are tonton songwut?")
+
+    last_error = ""
+    for model_name in models_to_try:
+        for attempt in range(3):
+            try:
+                response = gmn_client.models.generate_content(
+                    model=model_name,
+                    config=genai.types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        response_mime_type=output_type
+                    ),
+                    contents=prompt
+                )
+                return response.text
+            except Exception as e:
+                last_error = str(e)
+                if "503" in last_error or "UNAVAILABLE" in last_error or "429" in last_error:
+                    time.sleep(2)
+                    continue
+                else:
+                    break
+
+    return f"Error: เซิร์ฟเวอร์ Gemini มีผู้ใช้งานแน่นชั่วคราว กรุณากดปุ่มใหม่อีกครั้งในอีก 5-10 วินาที ({last_error})"
 
 def horo_tell(l4phone, question, time_diff):
     total_num = sum([int(i) for i in l4phone])
-    teller_prompt = f"""
-**Role:** You are a mystical Numerologist with an engaging, narrative style.
-**Task:** Interpret the destiny based on the last 4 digits of a phone number.
+    now = datetime.now()
+    cf = now.strftime("%A, %B %d, %Y")
+
+    # รวม Prompt เป็นคำขอเดียว ไม่ต้องยิง API 2 รอบ
+    if question and time_diff:
+        teller_prompt = f"""
+**Role:** You are a mystical and insightful Numerologist.
+**Task:** 1) Interpret base destiny from mobile numbers. 2) Predict future outcome for user's question within the timeframe.
 
 **Input Data:**
-- **Total Sum:** {total_num}
-- **Career Pair:** {l4phone[:2]}
-- **Finance Pair:** {l4phone[1:-1]}
-- **Love Pair:** {l4phone[-2:]}
+- Current Date: {cf}
+- Last 4 Digits: {l4phone} (Total Sum: {total_num})
+- Career Pair: {l4phone[:2]}, Finance Pair: {l4phone[1:-1]}, Love Pair: {l4phone[-2:]}
+- Timeframe: Next {time_diff}
+- Specific Question: "{question}"
 
 **Constraints:**
-1. **Length:** Strictly 1-2 short sentences per bullet point.
-2. **Formatting:** Use **Bold** ONLY for the headers. Do NOT use bold, italics, or any markdown in the body text.
-3. **Language:** Output in English first, followed by Thai.
+1. Length: 1-2 short sentences per bullet.
+2. Output format: English first, followed by Thai.
 
 **Response Format:**
 
 **[ENGLISH]**
-**Core Definition**
-[A short, catchy phrase describing the person]
+**Base Destiny**
+- **Career ({l4phone[:2]}):** [Short prediction]
+- **Finance ({l4phone[1:-1]}):** [Short prediction]
+- **Love ({l4phone[-2]}):** [Short prediction]
 
-**Career Overview**
-- [Sentence 1-2 about career based on {l4phone[:2]}]
-- [Sentence 1-2 extending the prediction]
-
-**Finance Overview**
-- [Sentence 1-2 about finance based on {l4phone[1:-1]}]
-- [Sentence 1-2 extending the prediction]
-
-**Love Overview**
-- [Sentence 1-2 about love based on {l4phone[-2:]}]
-- [Sentence 1-2 extending the prediction]
-
-**Conclusion**
-- [Summary sentence 1]
-- [Summary sentence 2]
-
-**[THAI]**
-**นิยามภาพรวมเป็นคำสั้นๆ**
-[วลีสั้นๆ ที่จำกัดความตัวตน]
-
-**ภาพรวมการงาน**
-- [ประโยคสั้นๆ ทำนายการงานจากเลข {l4phone[:2]}]
-- [ประโยคสั้นๆ ขยายความ]
-
-**ภาพรวมการเงิน**
-- [ประโยคสั้นๆ ทำนายการเงินจากเลข {l4phone[1:-1]}]
-- [ประโยคสั้นๆ ขยายความ]
-
-**ภาพรวมความรัก**
-- [ประโยคสั้นๆ ทำนายความรักจากเลข {l4phone[-2:]}]
-- [ประโยคสั้นๆ ขยายความ]
-
-**บทสรุป**
-- [ประโยคสรุปที่ 1]
-- [ประโยคสรุปที่ 2]
-"""
-    result = generate_gemini_answer(teller_prompt)
-    
-    if question and time_diff:
-        now = datetime.now()
-        cf = now.strftime("Today is %A, %B %d, %Y")
-        forture_prompt = f""""
-**Role:** You are a mystical and insightful Numerologist.
-**Task:** Predict the future outcome based on the user's numerology chart and current situation.
-
-**Input Context:**
-- **Current Date:** {cf}
-- **Timeframe for Prediction:** Next {time_diff}
-- **User's Specific Question:** "{question}"
-- **User's Base Numerology (Reference):** "{result}"
-
-**Instructions:**
-1. Analyze the "Base Numerology" regarding the "Question" to predict the outcome within the "Timeframe".
-2. Keep the tone mystical but conciseness is key.
-3. **Constraint:** Use only 1-2 short sentences per section.
-4. Output must be in **English** followed by **Thai**.
-
-**Output Format:**
+**Future Prediction (Next {time_diff})**
+- **Outcome:** [Direct prediction for "{question}"]
+- **Advice:** [Key advice/caution]
 
 ---
+**[THAI]**
+**พื้นดวงชะตา**
+- **การงาน ({l4phone[:2]}):** [คำทำนายสั้นๆ]
+- **การเงิน ({l4phone[1:-1]}):** [คำทำนายสั้นๆ]
+- **ความรัก ({l4phone[-2]}):** [คำทำนายสั้นๆ]
+
+**คำทำนายอนาคต (ในอีก {time_diff})**
+- **ผลลัพธ์:** [คำทำนายตรงๆ สำหรับคำถาม "{question}"]
+- **ข้อควรระวัง & คำแนะนำ:** [คำแนะนำสั้นๆ]
+"""
+    else:
+        teller_prompt = f"""
+**Role:** You are a mystical Numerologist with an engaging, narrative style.
+**Task:** Interpret destiny based on the last 4 digits of a phone number.
+
+**Input Data:**
+- Total Sum: {total_num}
+- Career Pair: {l4phone[:2]}, Finance Pair: {l4phone[1:-1]}, Love Pair: {l4phone[-2:]}
+
+**Response Format:**
+
 **[ENGLISH]**
-**Short Definition**
-[A catchy 3-5 word phrase defining the answer]
-
-**Outcome Overview**
-- [Sentence 1: The direct prediction based on the timeframe]
-- [Sentence 2: How the base numerology supports this]
-
-**Caution & Advice**
-- [Sentence 1: What to watch out for]
-- [Sentence 2: A quick advice to handle it]
+**Core Definition:** [Short phrase]
+- **Career ({l4phone[:2]}):** [1-2 sentences]
+- **Finance ({l4phone[1:-1]}):** [1-2 sentences]
+- **Love ({l4phone[-2]}):** [1-2 sentences]
 
 ---
 **[THAI]**
-**นิยามคำตอบสั้นๆ**
-[วลีสั้นๆ 3-5 คำ ที่สรุปคำตอบ]
-
-**ภาพรวมผลลัพธ์**
-- [ประโยคที่ 1: คำทำนายตรงๆ สำหรับช่วงเวลานี้]
-- [ประโยคที่ 2: เชื่อมโยงกับพื้นดวงที่มี]
-
-**ข้อควรระวัง**
-- [ประโยคที่ 1: สิ่งที่ต้องระวัง]
-- [ประโยคที่ 2: คำแนะนำสั้นๆ ในการรับมือ]
----
+**นิยามภาพรวม:** [วลีสั้นๆ]
+- **ภาพรวมการงาน ({l4phone[:2]}):** [1-2 ประโยค]
+- **ภาพรวมการเงิน ({l4phone[1:-1]}):** [1-2 ประโยค]
+- **ภาพรวมความรัก ({l4phone[-2]}):** [1-2 ประโยค]
 """
-        result_2 = generate_gemini_answer(forture_prompt)
-        return result_2
-    return result
 
+    return generate_gemini_answer(teller_prompt)
+
+# Session State Initialization
 if 'answer' not in st.session_state:
     st.session_state['answer'] = ''
 
-st.set_page_config(page_title='Horoscope')
 st.title('ดูดวงเบอร์โทรศัพท์4ตัวท้ายพร้อมคำทำนาย by Fariszme')
 st.subheader("Let's predict your basic destiny and future.")
 st.subheader("มาดูดวงชะตาและทำนายอนาคตกันเถอะ")
 
-col11, col12 = st.columns([2,1], vertical_alignment="bottom")
-user_l4phone = col11.text_input(':red[*]Mobile Number Numerology (Last 4 Digits)\n\nพื้นดวงจากเลขท้ายมือถือ 4 ตัว:',max_chars=4,placeholder='XXXX')
+col11, col12 = st.columns([2, 1])
+user_l4phone = col11.text_input(':red[*]Mobile Number Numerology (Last 4 Digits)\n\nพื้นดวงจากเลขท้ายมือถือ 4 ตัว:', max_chars=4, placeholder='XXXX')
 col12.write(':full_moon::waning_gibbous_moon::last_quarter_moon::waning_crescent_moon::new_moon::waxing_crescent_moon::first_quarter_moon::waxing_gibbous_moon::full_moon:')
 st.divider()
 
-col21, col22 = st.columns([2,1])
-user_question = col21.text_input('What you want to know\n\nคำถามที่อยากจะรู้:',placeholder='กรอกข้อความที่อยากจะรู้')
-time_diff = col22.selectbox('Upcoming events in the next...\n\nที่จะเกิดขึ้นข้างหน้าในอีก:', ['','3 day/3 วัน','7 day/7 วัน','15 day/15 วัน','30 day/30 วัน'])
+col21, col22 = st.columns([2, 1])
+user_question = col21.text_input('What you want to know\n\nคำถามที่อยากจะรู้:', placeholder='กรอกข้อความที่อยากจะรู้')
+time_diff = col22.selectbox('Upcoming events in the next...\n\nที่จะเกิดขึ้นข้างหน้าในอีก:', ['', '3 day/3 วัน', '7 day/7 วัน', '15 day/15 วัน', '30 day/30 วัน'])
 
 if st.button("Interpret"):
     if user_l4phone:
-        if user_l4phone.isdigit():
+        if user_l4phone.isdigit() and len(user_l4phone) == 4:
             with st.spinner('Interpreting...'):
                 answer = horo_tell(user_l4phone, user_question, time_diff)
                 st.session_state['answer'] = answer
         else:
-            st.warning('Please enter the last 4 digits./กรุณากรอกเลขท้ายมือถือ 4 ตัวด้วย')
+            st.warning('Please enter valid 4 digits./กรุณากรอกเลขท้ายมือถือให้ครบ 4 หลัก')
             st.session_state['answer'] = ""
     else:
         st.warning('Please enter the last 4 digits./กรุณากรอกเลขท้ายมือถือ 4 ตัวด้วย')
         st.session_state['answer'] = ""
-st.write(st.session_state['answer'])
+
+if st.session_state['answer']:
+    st.write(st.session_state['answer'])
