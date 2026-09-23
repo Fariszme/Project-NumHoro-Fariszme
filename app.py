@@ -12,7 +12,7 @@ def generate_gemini_answer(prompt, system_prompt="", is_json=False):
         return "Error: ไม่พบ GEMINI_API_KEY กรุณาตั้งค่าใน Streamlit Secrets"
 
     # 2. แก้ไขชื่อ Model เริ่มต้นให้ถูกต้อง (เช่น gemini-2.5-flash หรือ gemini-1.5-flash)
-    gemini_model = st.secrets.get("GEMINI_MODEL") or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model = st.secrets.get("GEMINI_MODEL") or os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
     
     try:
         gmn_client = genai.Client(api_key=gemini_api_key)
