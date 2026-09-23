@@ -142,7 +142,7 @@ if 'answer' not in st.session_state:
     st.session_state['answer'] = ''
 
 st.set_page_config(page_title='Horoscope')
-st.title('Horoscope')
+st.title('ดูดวงเบอร์โทรศัพท์4ตัวท้ายพร้อมคำทำนาย by Fariszme')
 st.subheader("Let's predict your basic destiny and future.")
 st.subheader("มาดูดวงชะตาและทำนายอนาคตกันเถอะ")
 
