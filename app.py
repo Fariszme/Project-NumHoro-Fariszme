@@ -3,15 +3,21 @@ import streamlit as st
 from google import genai
 from datetime import datetime
 
-def generate_gemini_answer(prompt, system_prompt = "", is_json=False):
-    # 1. ดึงค่าจาก Streamlit Secrets ก่อน ถ้าไม่มีค่อยหาใน os.environ
+def generate_gemini_answer(prompt, system_prompt="", is_json=False):
+    # 1. ดึงค่า API Key จาก Secrets หรือ Environment
     gemini_api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
     
-    # 2. แก้ไขชื่อ Model ให้ถูกต้อง (เช่น gemini-2.5-flash หรือ gemini-1.5-flash)
-    gemini_model = st.secrets.get("GEMINI_MODEL") or os.environ.get("GEMINI_MODEL", 'gemini-3.1-flash-lite')
-    gmn_client = genai.Client(api_key=gemini_api_key)
-    output_type = "application/json" if is_json else "text/plain"
+    # หากไม่พบ API Key ให้แจ้งเตือนผู้ใช้แทนการปล่อยให้ App ล่ม
+    if not gemini_api_key:
+        return "Error: ไม่พบ GEMINI_API_KEY กรุณาตั้งค่าใน Streamlit Secrets"
+
+    # 2. แก้ไขชื่อ Model เริ่มต้นให้ถูกต้อง (เช่น gemini-2.5-flash หรือ gemini-1.5-flash)
+    gemini_model = st.secrets.get("GEMINI_MODEL") or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    
     try:
+        gmn_client = genai.Client(api_key=gemini_api_key)
+        output_type = "application/json" if is_json else "text/plain"
+        
         response = gmn_client.models.generate_content(
             model=gemini_model,
             config=genai.types.GenerateContentConfig(
@@ -23,7 +29,6 @@ def generate_gemini_answer(prompt, system_prompt = "", is_json=False):
         return response.text
     except Exception as e:
         return f"Error: Could not generate text from AI.: {e}"
-# test = generate_gemini_answer("who are tonton songwut?")
 
 def horo_tell(l4phone, question, time_diff):
     total_num = sum([int(i) for i in l4phone])
@@ -89,7 +94,8 @@ def horo_tell(l4phone, question, time_diff):
     if question and time_diff:
         now = datetime.now()
         cf = now.strftime("Today is %A, %B %d, %Y")
-        forture_prompt = f""""
+        # แก้ไขจาก f"""" เป็น f"""
+        forture_prompt = f"""
 **Role:** You are a mystical and insightful Numerologist.
 **Task:** Predict the future outcome based on the user's numerology chart and current situation.
 
@@ -147,13 +153,13 @@ st.subheader("Let's predict your basic destiny and future.")
 st.subheader("มาดูดวงชะตาและทำนายอนาคตกันเถอะ")
 
 col11, col12 = st.columns([2,1], vertical_alignment="bottom")
-user_l4phone = col11.text_input(':red[*]Mobile Number Numerology (Last 4 Digits)\n\nพื้นดวงจากเลขท้ายมือถือ 4 ตัว:',max_chars=4,placeholder='XXXX')
+user_l4phone = col11.text_input(':red[*]Mobile Number Numerology (Last 4 Digits)\n\nพื้นดวงจากเลขท้ายมือถือ 4 ตัว:', max_chars=4, placeholder='XXXX')
 col12.write(':full_moon::waning_gibbous_moon::last_quarter_moon::waning_crescent_moon::new_moon::waxing_crescent_moon::first_quarter_moon::waxing_gibbous_moon::full_moon:')
 st.divider()
 
 col21, col22 = st.columns([2,1])
-user_question = col21.text_input('What you want to know\n\nคำถามที่อยากจะรู้:',placeholder='กรอกข้อความที่อยากจะรู้')
-time_diff = col22.selectbox('Upcoming events in the next...\n\nที่จะเกิดขึ้นข้างหน้าในอีก:', ['','3 day/3 วัน','7 day/7 วัน','15 day/15 วัน','30 day/30 วัน'])
+user_question = col21.text_input('What you want to know\n\nคำถามที่อยากจะรู้:', placeholder='กรอกข้อความที่อยากจะรู้')
+time_diff = col22.selectbox('Upcoming events in the next...\n\nที่จะเกิดขึ้นข้างหน้าในอีก:', ['', '3 day/3 วัน', '7 day/7 วัน', '15 day/15 วัน', '30 day/30 วัน'])
 
 if st.button("Interpret"):
     if user_l4phone:
@@ -167,4 +173,5 @@ if st.button("Interpret"):
     else:
         st.warning('Please enter the last 4 digits./กรุณากรอกเลขท้ายมือถือ 4 ตัวด้วย')
         st.session_state['answer'] = ""
+
 st.write(st.session_state['answer'])
